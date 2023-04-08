@@ -38,18 +38,6 @@
 #include <Arduino.h>
 #include "Rtc_Pcf8563.h"
 
-Rtc_Pcf8563::Rtc_Pcf8563(void)
-{
-    Wire.begin();
-    Rtcc_Addr = RTCC_R>>1;
-}
-
-Rtc_Pcf8563::Rtc_Pcf8563(int sdaPin, int sdlPin)
-{
-    Wire.begin(sdaPin, sdlPin);
-    Rtcc_Addr = RTCC_R>>1;
-}
-
 /* Private internal functions, but useful to look at if you need a similar func. */
 byte Rtc_Pcf8563::decToBcd(byte val)
 {
@@ -99,16 +87,16 @@ void Rtc_Pcf8563::clearStatus()
 byte Rtc_Pcf8563::readStatus2()
 {
     getDateTime();
-    return getStatus2();
+    return status2;
 }
 
 void Rtc_Pcf8563::clearVoltLow(void)
 {
     getDateTime();
     // Only clearing is possible on device (I tried)
-    setDateTime(getDay(), getWeekday(), getMonth(),
-                getCentury(), getYear(), getHour(),
-                getMinute(), getSecond());
+    setDateTime(day, weekday, month,
+                century, year, hour,
+                minute, second);
 }
 
 /*
@@ -134,7 +122,7 @@ void Rtc_Pcf8563::getDateTime(void)
     // time bytes
     //0x7f = 0b01111111
     volt_low = readBuffer[2] & RTCC_VLSEC_MASK;  //VL_Seconds
-    sec = bcdToDec(readBuffer[2] & ~RTCC_VLSEC_MASK);
+    second = bcdToDec(readBuffer[2] & ~RTCC_VLSEC_MASK);
     minute = bcdToDec(readBuffer[3] & 0x7f);
     //0x3f = 0b00111111
     hour = bcdToDec(readBuffer[4] & 0x3f);
@@ -188,7 +176,7 @@ void Rtc_Pcf8563::getDateTime(void)
 
 void Rtc_Pcf8563::setDateTime(byte day, byte weekday, byte month,
                               bool century, byte year, byte hour,
-                              byte minute, byte sec)
+                              byte minute, byte second)
 {
     /* year val is 00 to 99, xx
         with the highest bit of month = century
@@ -204,7 +192,7 @@ void Rtc_Pcf8563::setDateTime(byte day, byte weekday, byte month,
     /* As per data sheet, have to set everything all in one operation */
     Wire.beginTransmission(Rtcc_Addr);    // Issue I2C start signal
     Wire.write(RTCC_SEC_ADDR);       // send addr low byte, req'd
-    Wire.write(decToBcd(sec) &~RTCC_VLSEC_MASK); //set sec, clear VL bit
+    Wire.write(decToBcd(second) &~RTCC_VLSEC_MASK); //set second, clear VL bit
     Wire.write(decToBcd(minute));    //set minutes
     Wire.write(decToBcd(hour));        //set hour
     Wire.write(decToBcd(day));            //set day
@@ -214,32 +202,6 @@ void Rtc_Pcf8563::setDateTime(byte day, byte weekday, byte month,
     Wire.endTransmission();
     // Keep values in-sync with device
     getDateTime();
-}
-
-/**
-* Get alarm, set values to RTCC_NO_ALARM (99) if alarm flag is not set
-*/
-void Rtc_Pcf8563::getAlarm()
-{
-    getDateTime();
-}
-
-/*
-* Returns true if AIE is on
-*
-*/
-bool Rtc_Pcf8563::alarmEnabled()
-{
-    return getStatus2() & RTCC_ALARM_AIE;
-}
-
-/*
-* Returns true if AF is on
-*
-*/
-bool Rtc_Pcf8563::alarmActive()
-{
-    return getStatus2() & RTCC_ALARM_AF;
 }
 
 /* enable alarm interrupt
@@ -349,23 +311,6 @@ void Rtc_Pcf8563::resetAlarm()
     Wire.endTransmission();
 }
 
-// true if timer interrupt and control is enabled
-bool Rtc_Pcf8563::timerEnabled()
-{
-    if (getStatus2() & RTCC_TIMER_TIE)
-        if (timer_control & RTCC_TIMER_TE)
-            return true;
-    return false;
-}
-
-
-// true if timer is active
-bool Rtc_Pcf8563::timerActive()
-{
-    return getStatus2() & RTCC_TIMER_TF;
-}
-
-
 // enable timer and interrupt
 void Rtc_Pcf8563::enableTimer(void)
 {
@@ -472,113 +417,6 @@ void Rtc_Pcf8563::setSquareWave(byte frequency)
     Wire.endTransmission();
 }
 
-void Rtc_Pcf8563::clearSquareWave()
-{
-    Rtc_Pcf8563::setSquareWave(SQW_DISABLE);
-}
-
-const char *Rtc_Pcf8563::formatTime(byte style)
-{
-    getTime();
-    switch (style) {
-        case RTCC_TIME_HM:
-            strOut[0] = '0' + (hour / 10);
-            strOut[1] = '0' + (hour % 10);
-            strOut[2] = ':';
-            strOut[3] = '0' + (minute / 10);
-            strOut[4] = '0' + (minute % 10);
-            strOut[5] = '\0';
-            break;
-        case RTCC_TIME_HMS:
-        default:
-            strOut[0] = '0' + (hour / 10);
-            strOut[1] = '0' + (hour % 10);
-            strOut[2] = ':';
-            strOut[3] = '0' + (minute / 10);
-            strOut[4] = '0' + (minute % 10);
-            strOut[5] = ':';
-            strOut[6] = '0' + (sec / 10);
-            strOut[7] = '0' + (sec % 10);
-            strOut[8] = '\0';
-            break;
-    }
-    return strOut;
-}
-
-
-const char *Rtc_Pcf8563::formatDate(byte style)
-{
-    getDate();
-
-        switch (style) {
-
-        case RTCC_DATE_ASIA:
-            //do the asian style, yyyy-mm-dd
-            if (century ){
-                strDate[0] = '1';
-                strDate[1] = '9';
-            }
-            else {
-                strDate[0] = '2';
-                strDate[1] = '0';
-            }
-            strDate[2] = '0' + (year / 10 );
-            strDate[3] = '0' + (year % 10);
-            strDate[4] = '-';
-            strDate[5] = '0' + (month / 10);
-            strDate[6] = '0' + (month % 10);
-            strDate[7] = '-';
-            strDate[8] = '0' + (day / 10);
-            strDate[9] = '0' + (day % 10);
-            strDate[10] = '\0';
-            break;
-        case RTCC_DATE_US:
-        //the pitiful US style, mm/dd/yyyy
-            strDate[0] = '0' + (month / 10);
-            strDate[1] = '0' + (month % 10);
-            strDate[2] = '/';
-            strDate[3] = '0' + (day / 10);
-            strDate[4] = '0' + (day % 10);
-            strDate[5] = '/';
-            if (century){
-                strDate[6] = '1';
-                strDate[7] = '9';
-            }
-            else {
-                strDate[6] = '2';
-                strDate[7] = '0';
-            }
-            strDate[8] = '0' + (year / 10 );
-            strDate[9] = '0' + (year % 10);
-            strDate[10] = '\0';
-            break;
-        case RTCC_DATE_WORLD:
-        default:
-            //do the world style, dd-mm-yyyy
-            strDate[0] = '0' + (day / 10);
-            strDate[1] = '0' + (day % 10);
-            strDate[2] = '-';
-            strDate[3] = '0' + (month / 10);
-            strDate[4] = '0' + (month % 10);
-            strDate[5] = '-';
-
-            if (century){
-                strDate[6] = '1';
-                strDate[7] = '9';
-            }
-            else {
-                strDate[6] = '2';
-                strDate[7] = '0';
-            }
-            strDate[8] = '0' + (year / 10 );
-            strDate[9] = '0' + (year % 10);
-            strDate[10] = '\0';
-            break;
-
-    }
-    return strDate;
-}
-
 void Rtc_Pcf8563::initClock()
 {
     Wire.beginTransmission(Rtcc_Addr);    // Issue I2C start signal
@@ -600,141 +438,4 @@ void Rtc_Pcf8563::initClock()
     Wire.write((byte)0x0);     //set SQW, see: setSquareWave
     Wire.write((byte)0x0);     //timer off
     Wire.endTransmission();
-}
-
-void Rtc_Pcf8563::setTime(byte hour, byte minute, byte sec)
-{
-    getDateTime();
-    setDateTime(getDay(), getWeekday(), getMonth(),
-                getCentury(), getYear(), hour, minute, sec);
-}
-
-void Rtc_Pcf8563::setDate(byte day, byte weekday, byte month, bool century, byte year)
-{
-    getDateTime();
-    setDateTime(day, weekday, month, century, year,
-                getHour(), getMinute(), getSecond());
-}
-
-void Rtc_Pcf8563::getDate()
-{
-    getDateTime();
-}
-
-void Rtc_Pcf8563::getTime()
-{
-    getDateTime();
-}
-
-bool Rtc_Pcf8563::getVoltLow(void)
-{
-    return volt_low;
-}
-
-byte Rtc_Pcf8563::getSecond() {
-    return sec;
-}
-
-byte Rtc_Pcf8563::getMinute() {
-    return minute;
-}
-
-byte Rtc_Pcf8563::getHour() {
-    return hour;
-}
-
-byte Rtc_Pcf8563::getAlarmMinute() {
-    return alarm_minute;
-}
-
-byte Rtc_Pcf8563::getAlarmHour() {
-    return alarm_hour;
-}
-
-byte Rtc_Pcf8563::getAlarmDay() {
-    return alarm_day;
-}
-
-byte Rtc_Pcf8563::getAlarmWeekday() {
-    return alarm_weekday;
-}
-
-byte Rtc_Pcf8563::getTimerControl() {
-    return timer_control;
-}
-
-byte Rtc_Pcf8563::getTimerValue() {
-    // Impossible to freeze this value, it could
-    // be changing during read.  Multiple reads
-    // required to check for consistency.
-    uint8_t last_value;
-    do {
-        last_value = timer_value;
-        getDateTime();
-    } while (timer_value != last_value);
-    return timer_value;
-}
-
-byte Rtc_Pcf8563::getDay() {
-    return day;
-}
-
-byte Rtc_Pcf8563::getMonth() {
-    return month;
-}
-
-byte Rtc_Pcf8563::getYear() {
-    return year;
-}
-
-bool Rtc_Pcf8563::getCentury() {
-    return century;
-}
-
-byte Rtc_Pcf8563::getWeekday() {
-    return weekday;
-}
-
-byte Rtc_Pcf8563::getStatus1() {
-    return status1;
-}
-
-byte Rtc_Pcf8563::getStatus2() {
-    return status2;
-}
-
-unsigned long Rtc_Pcf8563::getTimestamp(){
-	getDateTime();	// update date and time
-	unsigned long timestamp = 0;
-
-	// Convert years in days
-	timestamp = (year-epoch_year)*365; // convert years in days
-
-	if((year-epoch_year)>1)	// add a dy when it's a leap year
-	{
-		for(unsigned char i = epoch_year; i<year;i++)
-			{
-				if(isLeapYear(century, i)) timestamp++; // add a day for each leap years
-			}
-	}
-	if(month>2&&isLeapYear(century, year)) timestamp++;	// test for the year's febuary
-
-	// add months converted in days
-	if(month>1) timestamp += months_days[month-2];
-
-	// add days
-	timestamp += (day-epoch_day);
-
-	timestamp*= 86400; 		// convert days in seconds
-
-	// convert time to second and add it to timestamp
-	unsigned long timeTemp = hour*60+ minute;
-	timeTemp *=60;
-	timeTemp += sec;
-
-	timestamp += timeTemp;	// add hours +minutes + seconds
-
-	timestamp += EPOCH_TIMESTAMP;	// add  epoch reference
-
-	return timestamp;
 }

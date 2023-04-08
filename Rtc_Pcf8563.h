@@ -130,9 +130,7 @@ extern TwoWire Wire;
 /* arduino class */
 class Rtc_Pcf8563 {
     public:
-    Rtc_Pcf8563();
-    Rtc_Pcf8563(int, int); /* Construct using different pins for sda & sdl */
-
+    Rtc_Pcf8563(): Rtcc_Addr(RTCC_R>>1){}
     void zeroClock();  /* Zero date/time, alarm / timer, default clkout */
     void clearStatus(); /* set both status bytes to zero */
     byte readStatus2();
@@ -140,7 +138,7 @@ class Rtc_Pcf8563 {
 
     void getDateTime();     /* get date and time vals to local vars */
     void setDateTime(byte day, byte weekday, byte month, bool century, byte year,
-                     byte hour, byte minute, byte sec);
+                     byte hour, byte minute, byte second);
     void getAlarm();  // same as getDateTime
     bool alarmEnabled();  // true if alarm interrupt is enabled
     bool alarmActive();   // true if alarm is active (going off)
@@ -160,11 +158,6 @@ class Rtc_Pcf8563 {
     void setSquareWave(byte frequency);
     void clearSquareWave();
 
-    /* get a output string, these call getTime/getDate for latest vals */
-    const char *formatTime(byte style=RTCC_TIME_HMS);
-    /* date supports 3 styles as listed in the wikipedia page about world date/time. */
-    const char *formatDate(byte style=RTCC_DATE_US);
-
     /* Return leap-days between start (inclusive) and end (exclusive) */
     int leapDaysBetween(byte century_start, byte year_start,
                         byte century_end, byte year_end) const;
@@ -177,38 +170,12 @@ class Rtc_Pcf8563 {
     /* Return the weekday for any date after 1900 */
     byte whatWeekday(byte day, byte month, byte century, int year) const;
 
-    bool getVoltLow();
-    byte getSecond();
-    byte getMinute();
-    byte getHour();
-    byte getDay();
-    byte getMonth();
-    byte getYear();
-    bool getCentury();
-    byte getWeekday();
-    byte getStatus1();
-    byte getStatus2();
-
-    byte getAlarmMinute();
-    byte getAlarmHour();
-    byte getAlarmDay();
-    byte getAlarmWeekday();
-
-    byte getTimerControl();
     byte getTimerValue();
-
-    unsigned long getTimestamp();	// return unix timestamp
 
     // Sets date/time to static fixed values, disable all alarms
     // use zeroClock() above to guarantee lowest possible values instead.
     void initClock();
-    // Slightly unsafe, don't use for new code, use above instead!
-    void setTime(byte hour, byte minute, byte sec);
-    void getTime();  // unsafe, don't use
-    void setDate(byte day, byte weekday, byte month, bool century, byte year);
-    void getDate();  // unsafe, don't use
 
-    private:
     /* methods */
     byte decToBcd(byte value);
     byte bcdToDec(byte value);
@@ -216,7 +183,7 @@ class Rtc_Pcf8563 {
     byte hour;
     byte minute;
     bool volt_low;
-    byte sec;
+    byte second;
     byte day;
     byte weekday;
     byte month;
@@ -230,16 +197,14 @@ class Rtc_Pcf8563 {
     byte squareWave;
     /* timer */
     byte timer_control;
-    byte timer_value;
     /* support */
     byte status1;
     byte status2;
     bool century;
 
-    char strOut[9];
-    char strDate[11];
-
-    int Rtcc_Addr;
+private:
+    byte timer_value;
+    const int Rtcc_Addr;
 };
 
 
@@ -304,4 +269,55 @@ inline byte Rtc_Pcf8563::whatWeekday(byte day, byte month,
     return (year + year / 4 - year / 100 + year / 400 +
             trans[month - 1] + day) % 7;
 }
+
+// true if timer interrupt and control is enabled
+bool Rtc_Pcf8563::timerEnabled()
+{
+    if (status2 & RTCC_TIMER_TIE)
+        if (timer_control & RTCC_TIMER_TE)
+            return true;
+    return false;
+}
+
+// true if timer is active
+bool Rtc_Pcf8563::timerActive()
+{
+    return status2 & RTCC_TIMER_TF;
+}
+
+/*
+* Returns true if AIE is on
+*
+*/
+bool Rtc_Pcf8563::alarmEnabled()
+{
+    return status2 & RTCC_ALARM_AIE;
+}
+
+/*
+* Returns true if AF is on
+*
+*/
+bool Rtc_Pcf8563::alarmActive()
+{
+    return status2 & RTCC_ALARM_AF;
+}
+
+void Rtc_Pcf8563::clearSquareWave()
+{
+    Rtc_Pcf8563::setSquareWave(SQW_DISABLE);
+}
+
+byte Rtc_Pcf8563::getTimerValue() {
+    // Impossible to freeze this value, it could
+    // be changing during read.  Multiple reads
+    // required to check for consistency.
+    uint8_t last_value;
+    do {
+        last_value = timer_value;
+        getDateTime();
+    } while (timer_value != last_value);
+    return timer_value;
+}
+
 #endif
