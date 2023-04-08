@@ -271,7 +271,7 @@ inline byte Rtc_Pcf8563::whatWeekday(byte day, byte month,
 }
 
 // true if timer interrupt and control is enabled
-bool Rtc_Pcf8563::timerEnabled()
+inline bool Rtc_Pcf8563::timerEnabled()
 {
     if (status2 & RTCC_TIMER_TIE)
         if (timer_control & RTCC_TIMER_TE)
@@ -280,7 +280,7 @@ bool Rtc_Pcf8563::timerEnabled()
 }
 
 // true if timer is active
-bool Rtc_Pcf8563::timerActive()
+inline bool Rtc_Pcf8563::timerActive()
 {
     return status2 & RTCC_TIMER_TF;
 }
@@ -289,7 +289,7 @@ bool Rtc_Pcf8563::timerActive()
 * Returns true if AIE is on
 *
 */
-bool Rtc_Pcf8563::alarmEnabled()
+inline bool Rtc_Pcf8563::alarmEnabled()
 {
     return status2 & RTCC_ALARM_AIE;
 }
@@ -298,17 +298,17 @@ bool Rtc_Pcf8563::alarmEnabled()
 * Returns true if AF is on
 *
 */
-bool Rtc_Pcf8563::alarmActive()
+inline bool Rtc_Pcf8563::alarmActive()
 {
     return status2 & RTCC_ALARM_AF;
 }
 
-void Rtc_Pcf8563::clearSquareWave()
+inline void Rtc_Pcf8563::clearSquareWave()
 {
     Rtc_Pcf8563::setSquareWave(SQW_DISABLE);
 }
 
-byte Rtc_Pcf8563::getTimerValue() {
+inline byte Rtc_Pcf8563::getTimerValue() {
     // Impossible to freeze this value, it could
     // be changing during read.  Multiple reads
     // required to check for consistency.
